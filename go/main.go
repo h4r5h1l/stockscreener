@@ -2,20 +2,22 @@ package main
 
 import (
 	"fmt"
-	"github.com/h4r5h1l/stockscreener/handler" // Import your cmd package
 	"os/exec"
 )
 
 func main() {
 	fmt.Println("Running Python from Go...!")
-	cmd := exec.Command("uv", "run", "../python/main.py")
+
+	// 1. Point directly to the python binary inside your custom 'twsenv' virtual environment
+	// 2. Fix the folder name from '../python/' to '../ibpython/'
+// The directory path and the script name must be separate arguments
+	cmd := exec.Command("uv", "run", "--directory", "../ibpython", "main.py", "fetch_universe") // Correct
+	// Captures both standard output and error messages together
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("Runtime Execution Error:", err)
 	}
+
+	fmt.Println("--- Subprocess Output ---")
 	fmt.Println(string(out))
-
-	fmt.Println("Running IngestEquities from Go...!")
-	handler.IngestEquities()
-
 }

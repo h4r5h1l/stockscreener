@@ -7,69 +7,31 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getEquityByConid = `-- name: GetEquityByConid :one
-SELECT conid, ticker, name, exchange
-FROM equities
-WHERE conid = $1
+const listEquitiesForSync = `-- name: ListEquitiesForSync :many
+SELECT conid,
+    ticker
+FROM equity_universe
 `
 
-func (q *Queries) GetEquityByConid(ctx context.Context, conid int32) (Equity, error) {
-	row := q.db.QueryRow(ctx, getEquityByConid, conid)
-	var i Equity
-	err := row.Scan(
-		&i.Conid,
-		&i.Ticker,
-		&i.Name,
-		&i.Exchange,
-	)
-	return i, err
+type ListEquitiesForSyncRow struct {
+	Conid  int32
+	Ticker string
 }
 
-const insertEquity = `-- name: InsertEquity :exec
-INSERT INTO equities (conid, ticker, name, exchange)
-VALUES ($1, $2, $3, $4)
-`
-
-type InsertEquityParams struct {
-	Conid    int32
-	Ticker   string
-	Name     string
-	Exchange string
-}
-
-func (q *Queries) InsertEquity(ctx context.Context, arg InsertEquityParams) error {
-	_, err := q.db.Exec(ctx, insertEquity,
-		arg.Conid,
-		arg.Ticker,
-		arg.Name,
-		arg.Exchange,
-	)
-	return err
-}
-
-const listEquities = `-- name: ListEquities :many
-SELECT conid, ticker, name, exchange
-FROM equities
-ORDER BY ticker
-`
-
-func (q *Queries) ListEquities(ctx context.Context) ([]Equity, error) {
-	rows, err := q.db.Query(ctx, listEquities)
+func (q *Queries) ListEquitiesForSync(ctx context.Context) ([]ListEquitiesForSyncRow, error) {
+	rows, err := q.db.Query(ctx, listEquitiesForSync)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Equity
+	var items []ListEquitiesForSyncRow
 	for rows.Next() {
-		var i Equity
-		if err := rows.Scan(
-			&i.Conid,
-			&i.Ticker,
-			&i.Name,
-			&i.Exchange,
-		); err != nil {
+		var i ListEquitiesForSyncRow
+		if err := rows.Scan(&i.Conid, &i.Ticker); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -78,4 +40,52 @@ func (q *Queries) ListEquities(ctx context.Context) ([]Equity, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateEquityMetrics = `-- name: UpdateEquityMetrics :exec
+UPDATE equity_universe
+SET pe_ratio = $1,
+    price_to_sales = $2,
+    return_on_equity = $3,
+    business_summary = $4,
+    updated_at = CURRENT_TIMESTAMP
+WHERE conid = $5
+`
+
+type UpdateEquityMetricsParams struct {
+	PeRatio         pgtype.Numeric
+	PriceToSales    pgtype.Numeric
+	ReturnOnEquity  pgtype.Numeric
+	BusinessSummary pgtype.Text
+	Conid           int32
+}
+
+func (q *Queries) UpdateEquityMetrics(ctx context.Context, arg UpdateEquityMetricsParams) error {
+	_, err := q.db.Exec(ctx, updateEquityMetrics,
+		arg.PeRatio,
+		arg.PriceToSales,
+		arg.ReturnOnEquity,
+		arg.BusinessSummary,
+		arg.Conid,
+	)
+	return err
+}
+
+const upsertEquityBase = `-- name: UpsertEquityBase :exec
+INSERT INTO equity_universe (conid, ticker, exchange)
+VALUES ($1, $2, $3) ON CONFLICT (conid) DO
+UPDATE
+SET ticker = EXCLUDED.ticker,
+    exchange = EXCLUDED.exchange
+`
+
+type UpsertEquityBaseParams struct {
+	Conid    int32
+	Ticker   string
+	Exchange string
+}
+
+func (q *Queries) UpsertEquityBase(ctx context.Context, arg UpsertEquityBaseParams) error {
+	_, err := q.db.Exec(ctx, upsertEquityBase, arg.Conid, arg.Ticker, arg.Exchange)
+	return err
 }

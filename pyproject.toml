@@ -6,5 +6,6 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "requests>=2.34.2",
+    "ibapi>=9.81.1.post1",
     "urllib3>=2.7.0",
 ]

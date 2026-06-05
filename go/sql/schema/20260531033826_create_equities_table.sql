@@ -1,9 +1,14 @@
 -- +goose Up
-CREATE TABLE equities (
-    conid INTEGER PRIMARY KEY,
-    ticker VARCHAR(10) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    exchange VARCHAR(50) NOT NULL
+CREATE TABLE equity_universe (
+    conid INT PRIMARY KEY,
+    ticker VARCHAR(12) NOT NULL,
+    exchange VARCHAR(12) NOT NULL,
+    pe_ratio NUMERIC(12, 4),
+    price_to_sales NUMERIC(12, 4),
+    return_on_equity NUMERIC(12, 4),
+    business_summary TEXT,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_equity_universe_ticker ON equity_universe(ticker);
 -- +goose Down
-DROP TABLE equities;
+DROP TABLE equity_universe;

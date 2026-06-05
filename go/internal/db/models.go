@@ -4,9 +4,17 @@
 
 package db
 
-type Equity struct {
-	Conid    int32
-	Ticker   string
-	Name     string
-	Exchange string
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type EquityUniverse struct {
+	Conid           int32
+	Ticker          string
+	Exchange        string
+	PeRatio         pgtype.Numeric
+	PriceToSales    pgtype.Numeric
+	ReturnOnEquity  pgtype.Numeric
+	BusinessSummary pgtype.Text
+	UpdatedAt       pgtype.Timestamp
 }

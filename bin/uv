@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Wrapper to run the project's virtualenv Python as `uv`.
+# Usage: uv <script.py> [args...]
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Resolve project root from bin/ (assumes structure: <project>/bin, <project>/twsenv)
+PYTHON="$SCRIPT_DIR/../twsenv/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  echo "Error: Python not found or not executable at $PYTHON" >&2
+  exit 2
+fi
+exec "$PYTHON" "$@"

@@ -1,0 +1,19 @@
+.
+  go.mod
+  go.sum
+  goose.sh
+  handler
+  internal
+    db
+      db.go
+      equities.sql.go
+      models.go
+  main.go
+  project_structure.txt
+  sql
+    queries
+      equities.sql
+    schema
+      20260531033806_init_schema.sql
+      20260531033826_create_equities_table.sql
+  sqlc.yaml

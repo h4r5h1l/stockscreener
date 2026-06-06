@@ -53,9 +53,9 @@ WHERE conid = $5
 `
 
 type UpdateEquityMetricsParams struct {
-	PeRatio         pgtype.Numeric
-	PriceToSales    pgtype.Numeric
-	ReturnOnEquity  pgtype.Numeric
+	PeRatio         pgtype.Float8
+	PriceToSales    pgtype.Float8
+	ReturnOnEquity  pgtype.Float8
 	BusinessSummary pgtype.Text
 	Conid           int32
 }

@@ -1,63 +1,105 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"log"
 	"os/exec"
+	"strings"
 
-	// Update imports
 	"github.com/h4r5h1l/stockscreener/internal/db"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
 	ctx := context.Background()
-
-	// 1. Connect using pgxpool
-	// Use the project's migration DB string (no embedded credentials, disable TLS for local dev)
 	connStr := "postgres://localhost:5432/stockscreener?sslmode=disable"
 	dbpool, err := pgxpool.New(ctx, connStr)
 	if err != nil {
-		fmt.Println("Database Connection Error:", err)
-		return
+		log.Fatal("DB Error:", err)
 	}
 	defer dbpool.Close()
-
-	// sqlc.New(dbpool) works perfectly because pgxpool implements DBTX
 	queries := db.New(dbpool)
 
-	fmt.Println("Running Python from Go...!")
-
-	// 2. Execute Python
+	// PHASE 1: Fetch Universe
+	fmt.Println("Syncing Universe...")
 	cmd := exec.Command("uv", "run", "--directory", "../ibpython", "main.py", "fetch_universe")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("Runtime Execution Error: %v\nOutput: %s\n", err, string(out))
-	}
+	out, _ := cmd.CombinedOutput()
 
 	var equities []struct {
-		Ticker   string `json:"ticker"`
-		Conid    int32  `json:"conid"`
-		Exchange string `json:"exchange"`
+		Ticker string `json:"ticker"`
+		Conid  int32  `json:"conid"`
+	}
+	json.Unmarshal(out, &equities)
+
+	// PHASE 2: Stream Fundamentals
+	fmt.Println("Streaming Fundamentals...")
+	conids := []string{}
+	for _, e := range equities {
+		conids = append(conids, fmt.Sprintf("%d", e.Conid))
 	}
 
-	if err := json.Unmarshal(out, &equities); err != nil {
-		fmt.Println("JSON Unmarshal Error:", err)
+	args := append([]string{"run", "--directory", "../ibpython", "main.py", "stream_fundamentals"}, conids...)
+	cmd = exec.Command("uv", args...)
+	stdout, _ := cmd.StdoutPipe()
+	cmd.Start()
+
+	scanner := bufio.NewScanner(stdout)
+	var currentXML strings.Builder
+	var currentConID int32
+	parsing := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "START_CONID:") {
+			parsing = true
+			fmt.Sscanf(line, "START_CONID:%d", &currentConID)
+			currentXML.Reset()
+		} else if line == "END_XML_BLOCK" {
+			parsing = false
+			processXML(ctx, queries, currentConID, currentXML.String())
+		} else if parsing {
+			currentXML.WriteString(line)
+		}
+	}
+	cmd.Wait()
+}
+
+func processXML(ctx context.Context, q *db.Queries, conid int32, data string) {
+	if data == "NOT_FOUND" {
 		return
 	}
 
-	// 3. Populate Database
-	for _, eq := range equities {
-		err := queries.UpsertEquityBase(ctx, db.UpsertEquityBaseParams{
-			Conid:    eq.Conid,
-			Ticker:   eq.Ticker,
-			Exchange: eq.Exchange,
-		})
-		if err != nil {
-			fmt.Printf("Database Upsert Error for %s: %v\n", eq.Ticker, err)
-		}
+	// Define your XML mapping structure here
+	type Report struct {
+		Ratios struct {
+			Ratio []struct {
+				ID    string  `xml:"ID,attr"`
+				Value float64 `xml:",chardata"`
+			} `xml:"Ratio"`
+		} `xml:"Ratios"`
 	}
 
-	fmt.Println("Table populated successfully!")
+	var r Report
+	xml.Unmarshal([]byte(data), &r)
+
+	// Extract specific data (example: P/E Ratio)
+	for _, ratio := range r.Ratios.Ratio {
+		if ratio.ID == "PERatio" {
+			peValue := pgtype.Float8{
+				Float64: ratio.Value,
+				Valid:   true,
+			}
+
+			q.UpdateEquityMetrics(ctx, db.UpdateEquityMetricsParams{
+				Conid:   conid,
+				PeRatio: peValue, // Ensure you have this field in your DB
+			})
+			fmt.Printf("Updated ConID %d: PE Ratio %f\n", conid, ratio.Value)
+		}
+	}
 }

@@ -12,9 +12,9 @@ type EquityUniverse struct {
 	Conid           int32
 	Ticker          string
 	Exchange        string
-	PeRatio         pgtype.Numeric
-	PriceToSales    pgtype.Numeric
-	ReturnOnEquity  pgtype.Numeric
+	PeRatio         pgtype.Float8
+	PriceToSales    pgtype.Float8
+	ReturnOnEquity  pgtype.Float8
 	BusinessSummary pgtype.Text
 	UpdatedAt       pgtype.Timestamp
 }
